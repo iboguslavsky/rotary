@@ -13,7 +13,7 @@
 
 // How many ADC conversions before the level is considered settled?
 // This sets minimum recognized rotation speed
-#define TRESHOLD 30
+#define TRESHOLD 100
 
 // Setup STDOUT so that printf(), etc work - costs about 300 bytes
 static FILE mystdout = FDEV_SETUP_STREAM (dbg_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -28,16 +28,17 @@ enum state_t {OFF, S1, S2, S1S2, BUTTON_DWN = 0b00111111};
 #define BACKWARD (OFF << 6 | S1 << 4 | S1S2 << 2 | S2)
 #define BUTTON   (OFF << 6 | BUTTON_DWN)
 
-volatile unsigned char flag = IDLE;
+volatile uint8_t fifo = IDLE;
 
 ISR (ADC_vect) {
 unsigned int adch;
 enum state_t state = OFF; 
 static enum state_t prev_state = OFF;
-static uint8_t count = 0, vec = 0;
+static uint8_t count = 0;
 
   adch = ADCH;
 
+  // ADC tresholds for various button states
   if (adch == 0) state = BUTTON_DWN;
     else 
       if (adch > 0 && adch < 100) state = S1S2;
@@ -53,32 +54,23 @@ static uint8_t count = 0, vec = 0;
     if (count == 255) return;
     count++;
   }
+
+  // State change
   else {
 
-    // Still bouncing
-    if (count < TRESHOLD) {
-       prev_state = state;
-       count = 1;
-       return;
-    }
+    // Has state been stable long enough (not bouncing)?
+    if (count >= TRESHOLD) {
 
-    // Transition complete. Put it in the FIFO
-    if (prev_state == BUTTON_DWN) {
-      vec = BUTTON_DWN;
-    }
-    else { 
-      vec <<= 2; vec |= ((uint8_t) prev_state) & 0b00000011; 
-    }
-    
-    // Button has just one transition (BUTTON_DWN -> OFF)
-    if (vec == BUTTON)
-      flag = BUTTON;
-    
-    if (vec == FORWARD)
-      flag = FORWARD;
+      // Button has just one transition (BUTTON_DWN -> OFF)
+      if (prev_state == BUTTON_DWN) {
+        fifo = BUTTON_DWN;
+      }
 
-    if (vec == BACKWARD)
-      flag = BACKWARD;
+      // Put state in the FIFO, where we keep pattern of states for grey code rotary
+      else { 
+        fifo <<= 2; fifo |= ((uint8_t) prev_state) & 0b00000011; 
+      }
+    }
 
     prev_state = state;
     count = 1;
@@ -121,19 +113,12 @@ int main(void) {
 
   while (1) {
 
-    if (flag) {
-
-      if (flag == FORWARD)
-        printf ("FORWARD\r\n");
-
-      if (flag == BACKWARD)
-        printf ("BACKWARD\r\n");
-
-      if (flag == BUTTON)
-        printf ("BUTTON\r\n");
-
-      flag = IDLE;
-    }
+    // Check FIFO for recognizable patterns
+    if (fifo == FORWARD) { printf ("FORWARD\r\n"); fifo = IDLE;}
+    else
+      if (fifo == BACKWARD) { printf ("BACKWARD\r\n"); fifo = IDLE;}
+      else
+        if (fifo == BUTTON) { printf ("BUTTON\r\n"); fifo = IDLE;}
   }
 
   return 0;
