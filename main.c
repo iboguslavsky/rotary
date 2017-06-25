@@ -12,8 +12,9 @@
 #define ROTARY PB5
 
 // How many ADC conversions before the level is considered settled?
-// This sets minimum recognized rotation speed
-#define TRESHOLD 100
+// This sets minimum recognized rotation speed (and click/double click for the button)
+#define TRESHOLD_ROTARY 10 
+#define TRESHOLD_BUTTON 200
 
 // Setup STDOUT so that printf(), etc work - costs about 300 bytes
 static FILE mystdout = FDEV_SETUP_STREAM (dbg_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -58,18 +59,16 @@ static uint8_t count = 0;
   // State change
   else {
 
-    // Has state been stable long enough (not bouncing)?
-    if (count >= TRESHOLD) {
+    // Button has separate treshold and just one transition (BUTTON_DWN -> OFF)
+    if (prev_state == BUTTON_DWN && count >= TRESHOLD_BUTTON) 
+      fifo = BUTTON_DWN;
+    else 
 
-      // Button has just one transition (BUTTON_DWN -> OFF)
-      if (prev_state == BUTTON_DWN) {
-        fifo = BUTTON_DWN;
-      }
+    // Has state been stable long enough (not bouncing)?
+    if (count >= TRESHOLD_ROTARY) {
 
       // Put state in the FIFO, where we keep pattern of states for grey code rotary
-      else { 
-        fifo <<= 2; fifo |= ((uint8_t) prev_state) & 0b00000011; 
-      }
+      fifo <<= 2; fifo |= ((uint8_t) prev_state) & 0b00000011; 
     }
 
     prev_state = state;
