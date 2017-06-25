@@ -16,31 +16,34 @@
 #define TRESHOLD_ROTARY 10 
 #define TRESHOLD_BUTTON 200
 
+// Max number of ADC conversions ("ticks") in between button clicks to consider it a double-click
+#define TRESHOLD_DOUBLE_CLICK 2000
+
 // Setup STDOUT so that printf(), etc work - costs about 300 bytes
 static FILE mystdout = FDEV_SETUP_STREAM (dbg_putchar, NULL, _FDEV_SETUP_WRITE);
 
 void setup_timer1 ();
 void setup_adc ();
 
-enum rotary_t {IDLE, BUTTON, FORWARD, BACKWARD};
-enum state_t {OFF, S1, S2, S1S2, BUTTON_DWN = 0b00111111};
+enum state_t {IDLE, S1, S2, S1S2, BTTN_DWN, BTTN_DBL};
 
-#define FORWARD  (OFF << 6 | S2 << 4 | S1S2 << 2 | S1)
-#define BACKWARD (OFF << 6 | S1 << 4 | S1S2 << 2 | S2)
-#define BUTTON   (OFF << 6 | BUTTON_DWN)
+#define FORWARD  (IDLE << 6 | S2 << 4 | S1S2 << 2 | S1)
+#define BACKWARD (IDLE << 6 | S1 << 4 | S1S2 << 2 | S2)
 
 volatile uint8_t fifo = IDLE;
+volatile uint8_t button = IDLE;
 
 ISR (ADC_vect) {
 unsigned int adch;
-enum state_t state = OFF; 
-static enum state_t prev_state = OFF;
+enum state_t state = IDLE; 
+static enum state_t prev_state = IDLE;
 static uint8_t count = 0;
+static uint16_t ticks = 0;
 
   adch = ADCH;
 
   // ADC tresholds for various button states
-  if (adch == 0) state = BUTTON_DWN;
+  if (adch == 0) state = BTTN_DWN;
     else 
       if (adch > 0 && adch < 100) state = S1S2;
         else 
@@ -48,7 +51,16 @@ static uint8_t count = 0;
 	    else
   	      if (adch >= 150 && adch < 200) state = S1;
 		else 
-  		  if (adch >= 200) state = OFF;
+  		  if (adch >= 200) state = IDLE;
+
+  // Track button double-click
+  if (ticks) {
+    // Second button click never came
+    if (++ticks >= TRESHOLD_DOUBLE_CLICK) {
+      button = BTTN_DWN;
+      ticks = 0;
+    }
+  }
 
   // State is holding steady
   if (state == prev_state) {
@@ -59,9 +71,19 @@ static uint8_t count = 0;
   // State change
   else {
 
-    // Button has separate treshold and just one transition (BUTTON_DWN -> OFF)
-    if (prev_state == BUTTON_DWN && count >= TRESHOLD_BUTTON) 
-      fifo = BUTTON_DWN;
+    // Button has separate treshold and just one transition (BUTTON_DWN -> IDLE)
+    if (prev_state == BTTN_DWN && count >= TRESHOLD_BUTTON) {
+
+      // First click? Start counter and wait for double click - or timeout
+      if (!ticks)
+        ticks++;
+      else 
+	// Second click within TRESHOLD_DOUBLE_CLICK ticks?
+        if (ticks < TRESHOLD_DOUBLE_CLICK) {
+          ticks = 0;
+          button = BTTN_DBL;
+	}
+    }
     else 
 
     // Has state been stable long enough (not bouncing)?
@@ -76,31 +98,13 @@ static uint8_t count = 0;
   }
 }
 
-ISR (TIMER1_OVF_vect) {
-// uint8_t lower, higher;
-
-  // Fire off ADC conversion
-  ON (ADCSRA, ADSC);
-
-  // Wait for results (when ADSC is 0 again)
-  while (ADCSRA & (1 << ADSC)) {
-  }
-
-  // lower = ADCL; higher = ADCH;
-  // printf ("TEMP: %d C\r\n", (higher * 256 + lower) - 300 + 25);
-
-  // just 8 bit resolution
-  printf ("ADC: %d\r\n", ADCH);
-}
-
 int main(void) {
+char spinner[] = {'|', '/', '-', '\\'};
+uint8_t spin_state = 0;
 
   stdout = &mystdout;
 
   dbg_tx_init ();
-
-  // setup_timer1 ();
-  // printf ("Timer1 setup OK\r\n");
 
   setup_adc ();
   printf ("ADC setup OK\r\n");
@@ -113,27 +117,44 @@ int main(void) {
   while (1) {
 
     // Check FIFO for recognizable patterns
-    if (fifo == FORWARD) { printf ("FORWARD\r\n"); fifo = IDLE;}
-    else
-      if (fifo == BACKWARD) { printf ("BACKWARD\r\n"); fifo = IDLE;}
-      else
-        if (fifo == BUTTON) { printf ("BUTTON\r\n"); fifo = IDLE;}
+    if (fifo == FORWARD) {
+
+      fifo = IDLE;
+
+      if (spin_state == sizeof (spinner) - 1) 
+        spin_state = 0;
+      else 
+	spin_state++;
+
+      printf ("\r%c ", spinner[spin_state]);
+    }
+
+    if (fifo == BACKWARD) {
+
+      fifo = IDLE;
+
+      if (!spin_state) 
+        spin_state = 3;
+      else 
+	spin_state--;
+
+      printf ("\r%c ", spinner[spin_state]);
+    }
+
+    if (button == BTTN_DWN) {
+
+       button = IDLE;
+       printf ("\r%c ", '*');
+    }
+
+    if (button == BTTN_DBL) {
+
+       button = IDLE;
+       printf ("\r%c ", 'O');
+    }
   }
 
   return 0;
-}
-
-
-void setup_timer1 () {
-
-  // Tclk = CLK / 16384 ~0.5ms
-  ON (TCCR1, CS13);
-  ON (TCCR1, CS12);
-  ON (TCCR1, CS11);
-  ON (TCCR1, CS10);
-
-  // Enable Overflow IRQ
-  // ON (TIMSK, TOIE1);
 }
 
 void setup_adc () {
