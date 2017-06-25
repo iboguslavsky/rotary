@@ -55,7 +55,8 @@ static uint16_t ticks = 0;
 
   // Track button double-click
   if (ticks) {
-    // Second button click never came
+    // If we ended up here, the second button click never came
+    // It's a single click then!
     if (++ticks >= TRESHOLD_DOUBLE_CLICK) {
       button = BTTN_DWN;
       ticks = 0;
@@ -99,8 +100,6 @@ static uint16_t ticks = 0;
 }
 
 int main(void) {
-char spinner[] = {'|', '/', '-', '\\'};
-uint8_t spin_state = 0;
 
   stdout = &mystdout;
 
@@ -120,38 +119,26 @@ uint8_t spin_state = 0;
     if (fifo == FORWARD) {
 
       fifo = IDLE;
-
-      if (spin_state == sizeof (spinner) - 1) 
-        spin_state = 0;
-      else 
-	spin_state++;
-
-      printf ("\r%c ", spinner[spin_state]);
+      puts ("FORWARD\r");
     }
+    else 
+      if (fifo == BACKWARD) {
 
-    if (fifo == BACKWARD) {
-
-      fifo = IDLE;
-
-      if (!spin_state) 
-        spin_state = 3;
-      else 
-	spin_state--;
-
-      printf ("\r%c ", spinner[spin_state]);
-    }
+        fifo = IDLE;
+        puts ("BACKWARD\r");
+      }
 
     if (button == BTTN_DWN) {
 
        button = IDLE;
-       printf ("\r%c ", '*');
+       puts ("CLICK\r");
     }
+    else 
+      if (button == BTTN_DBL) {
 
-    if (button == BTTN_DBL) {
-
-       button = IDLE;
-       printf ("\r%c ", 'O');
-    }
+         button = IDLE;
+         puts ("DOUBLE CLICK\r");
+      }
   }
 
   return 0;
@@ -170,10 +157,10 @@ void setup_adc () {
   // OFF (ADMUX, REFS0);
 
   // Use internal TEMP sensor
-  ON (ADMUX, MUX3);
-  ON (ADMUX, MUX2);
-  ON (ADMUX, MUX1);
-  ON (ADMUX, MUX0);
+  // ON (ADMUX, MUX3);
+  // ON (ADMUX, MUX2);
+  // ON (ADMUX, MUX1);
+  // ON (ADMUX, MUX0);
 
   // USE ADC2 (PB4) Single - ended input
   OFF (ADMUX, MUX3);
