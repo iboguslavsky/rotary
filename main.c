@@ -99,13 +99,11 @@ uint16_t *tmpkeys;
     // Any of the keys has > 2000 values? Stop and sort
     for (uint8_t i = 0; i < size; i++) {
 
-      if (values[i] > 2000) {
+      if (values[i] > 300) {
 
-	/*
         for (uint8_t i = 0; i < size; i++) {
           printf ("%u[%d] => %u\r\n", i, keys[i], values[i]);
         }
-	*/
 
 	tmp = calloc (size, 2);
 
