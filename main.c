@@ -18,6 +18,7 @@
 #define TRESHOLD_BUTTON 8000
 #define TRESHOLD_LONG_CLICK 65534
 
+
 #define SPACE_BETWEEN_BUCKETS 50
 
 // Max number of ADC conversions ("ticks") in between button clicks to consider it a double-click
